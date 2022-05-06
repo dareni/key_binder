@@ -1,0 +1,17 @@
+[package]
+name = "key_binder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = "0.2.114"
+input = "0.7.1"
+log = "0.4"
+env_logger = "0.9"
+rs_input = { git = "https://github.com/dareni/rs_input", branch="main" }
+clap = {version = "3.0.14", features = ["derive"] }
+nix = "0.24"
+ctrlc = "3.2"
+
