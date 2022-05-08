@@ -1,4 +1,5 @@
-use std::thread;
+mod params;
+
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::Error;
@@ -10,6 +11,7 @@ use std::process::Child;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::thread;
 
 use input::event::keyboard::KeyState;
 use input::event::keyboard::KeyboardEvent::Key;
@@ -66,8 +68,10 @@ pub fn terminate_child(child_process: Result<Child, Error>, wait: bool) -> bool 
                 child.wait().expect("Command failed to complete.");
             });
             if wait {
-              //On sigterm wait for cleanup completion before main program exit.
-              terminate_handle.join().expect("Failed to join terminate thread.");
+                //On sigterm wait for cleanup completion before main program exit.
+                terminate_handle
+                    .join()
+                    .expect("Failed to join terminate thread.");
             }
             true
         } else {
@@ -110,24 +114,53 @@ pub fn start_process(command: &Vec<&str>) -> Result<Child, Error> {
     child_process
 }
 
-mod params;
+pub fn get_device_param(
+    device: Option<String>,
+    mut keyboard_list: Vec<rs_input::Keyboard>,
+) -> String {
+    let keyboard_count = keyboard_list.len();
+    let keyboard_path: String;
+
+    if keyboard_list.len() < 1 {
+        panic!("no keyboard found");
+    } else if keyboard_count == 1 {
+        keyboard_path = keyboard_list.swap_remove(0).path;
+    } else {
+        if device.is_some() {
+            keyboard_path = device.unwrap();
+            //A device was passed as a parameter so check it is valid.
+            let is_match = keyboard_list.iter().any(|kb| kb.path.eq(&keyboard_path));
+            if !is_match {
+                println!("Valid devices:{:?}", keyboard_list);
+                panic!("Invalid device {}", keyboard_path);
+            }
+        } else {
+            println!(
+                "Several keyboard devices. Selection may be required:{:?}",
+                keyboard_list
+            );
+            keyboard_path = keyboard_list.swap_remove(0).path;
+        }
+    }
+    keyboard_path
+}
 
 pub fn doit() {
     env_logger::init();
     let params = params::get_params();
     debug!(
-        "Params: command:{}, key:{}",
-        params.command, params.key_code
+        "Params: command:{}, key:{}, device:{:?}",
+        params.command, params.key_code, params.device
     );
     let command: Vec<&str> = params.command.as_str().split_whitespace().collect();
     let mut input: input::Libinput = Libinput::new_from_path(Interface);
     let keyboard_list: Vec<rs_input::Keyboard> = rs_input::get_keyboards();
-    if keyboard_list.len() < 1 {
-        panic!("no keyboard found");
-    }
-    let keyboard_path = &keyboard_list[0].path;
-    debug!("Keyboard: {}", keyboard_path);
-    let _keyboard_device = input.path_add_device(keyboard_path);
+    debug!("Keyboard list:{:?}", keyboard_list);
+
+    let keyboard_path: String = get_device_param(params.device, keyboard_list);
+
+    debug!("Keyboard: {}", &keyboard_path);
+    let _keyboard_device = input.path_add_device(&keyboard_path);
 
     //Holder so we know when to spawn/terminate a process for the command.
     let mut child_process: Result<Child, Error> = Err(Error::new(ErrorKind::Other, "init"));
